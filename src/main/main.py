@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QMainWindow, QFileDialog, QApplication, QLabel, QPushButton
+from PyQt6.QtWidgets import QMainWindow, QFileDialog, QApplication, QLabel, QPushButton, QDialog, QLineEdit
 from PyQt6.QtGui import QPixmap, QPainter, QPen
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6 import uic
@@ -17,20 +17,37 @@ class ProcessWizardWindow(QMainWindow):
         
 
         self.current_polygon_points = []
-        self.tools = generalUtils.read_tools_from_json('./data/tools.json')
-        self.fill_tools_list()
+        
         self.actionOpen_image.triggered.connect(self.open_image)
         self.draw_polygon_pushButton.clicked.connect(self.enable_drawing)
+        self.add_basic_object_pushButton.clicked.connect(self.open_add_basic_object_form)
+        self.add_basic_action_pushButton.clicked.connect(self.open_add_basic_action_form)
 
+
+    def open_add_basic_object_form(self):
+        dialog = BasicObjectForm(self)
+        dialog.exec()  # Open the form as a modal dialog
+
+        # Get the returned data if the dialog was accepted
+        if dialog.result() == QDialog.DialogCode.Accepted:
+            data = dialog.get_form_data()
+            print("Form Data:", data)  # You can now use the data in the main window
+
+    def open_add_basic_action_form(self):
+        dialog = BasicActionForm(self)
+        dialog.exec()  # Open the form as a modal dialog
+
+        # Get the returned data if the dialog was accepted
+        if dialog.result() == QDialog.DialogCode.Accepted:
+            data = dialog.get_form_data()
+            print("Form Data:", data)  # You can now use the data in the main window
 
 
     def open_image(self):
         print('Opening image')
         self.start_browse_image()
 
-    def fill_tools_list(self):
-        tools_list = [None] + [t.name for t in self.tools]
-        self.tool_comboBox.addItems(tools_list)
+    
 
     def start_browse_image(self):
         file_filter = "Image Files (*.png *.jpg *.bmp *.gif);;All Files (*)"
@@ -115,18 +132,48 @@ class ProcessWizardWindow(QMainWindow):
 
         return False
 
-    # def paintEvent(self, event):
-    #     super().paintEvent(event)
-    #     if self.points:
-    #         painter = QPainter(self.image_label.pixmap())
-    #         pen = QPen(Qt.GlobalColor.red)
-    #         pen.setWidth(2)
-    #         painter.setPen(pen)
-    #         if len(self.points) > 1:
-    #             for i in range(len(self.points) - 1):
-    #                 painter.drawLine(self.points[i], self.points[i + 1])
-    #             painter.drawLine(self.points[-1], self.points[0])  # Optionally close the polygon
-    #         painter.end()
+
+class BasicObjectForm(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        uic.loadUi('./ui/basic_object.ui', self)  # Load the form UI
+
+        self.baisc_object_confirm_pushButton.clicked.connect(self.accept)  # Closes the dialog and sets result to Accepted
+
+    def get_form_data(self):
+        # Gather data from the form fields
+        return {
+            'name': self.basic_object_name_lineEdit.text(),
+            'weight': self.basic_object_weight_lineEdit.text(),
+            'color': self.basic_object_color_lineEdit.text(),
+            'serial_number': self.basic_object_serial_lineEdit.text(),
+            'bucket': self.basic_object_bucket_lineEdit.text(),
+            'quality': self.basic_object_quality_lineEdit.text()
+        }
+
+
+class BasicActionForm(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.tools = generalUtils.read_tools_from_json('./data/tools.json')
+        uic.loadUi('./ui/basic_action.ui', self)  # Load the form UI
+        self.fill_tools_list()
+        # UI elements
+        
+        self.basic_action_confirm_pushButton.clicked.connect(self.accept)  # Closes the dialog and sets result to Accepted
+
+
+    def fill_tools_list(self):
+        tools_list = [None] + [t.name for t in self.tools]
+        self.basic_action_tool_comboBox.addItems(tools_list)
+
+    def get_form_data(self):
+        # Gather data from the form fields
+        return {
+            'tool': self.basic_action_tool_comboBox.currentText(),
+            'time': self.basic_action_time_lineEdit.text(),
+            'anomaly_action': self.basic_action_anomaly_lineEdit.text()
+        }
 
 if __name__ == '__main__':
     app = QApplication([])
