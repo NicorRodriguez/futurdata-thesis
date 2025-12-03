@@ -19,21 +19,90 @@ class DiagramCanvas(tk.Canvas):
     COMPONENT_FILL = "white"
     BORDER_COLOR = "black"
 
+    MIN_CANVAS_WIDTH = 2000
+    MIN_CANVAS_HEIGHT = 2000
+    EXPANSION_MARGIN = 500
+
     def __init__(self, parent, **kwargs):
         kwargs.setdefault('bg', 'white')
         kwargs.setdefault('highlightthickness', 0)
         super().__init__(parent, **kwargs)
-        self.config(scrollregion=(0, 0, 2000, 2000))
+        self.canvas_width = self.MIN_CANVAS_WIDTH
+        self.canvas_height = self.MIN_CANVAS_HEIGHT
+        self.config(scrollregion=(0, 0, self.canvas_width, self.canvas_height))
         self.show_grid = True
         self.snap_to_grid = True
         self.alignment_guides = {'vertical': [], 'horizontal': []}
+        self.draw_grid()
+
+    def expand_canvas_if_needed(self, x: float, y: float, margin: float = 100, redraw_grid: bool = False) -> bool:
+        """Expand canvas if point is near the edge. Returns True if expanded."""
+        expanded = False
+
+        # Check if we need to expand width
+        if x > self.canvas_width - margin:
+            self.canvas_width = int(x + self.EXPANSION_MARGIN)
+            expanded = True
+
+        # Check if we need to expand height
+        if y > self.canvas_height - margin:
+            self.canvas_height = int(y + self.EXPANSION_MARGIN)
+            expanded = True
+
+        if expanded:
+            self.config(scrollregion=(0, 0, self.canvas_width, self.canvas_height))
+            if redraw_grid:
+                self.draw_grid()
+
+        return expanded
+
+    def auto_scroll(self, event_x: int, event_y: int, scroll_margin: int = 50, scroll_amount: int = 20):
+        """Auto-scroll canvas when mouse is near the edge during drag."""
+        # Get visible area dimensions
+        visible_width = self.winfo_width()
+        visible_height = self.winfo_height()
+
+        scrolled = False
+
+        # Scroll right
+        if event_x > visible_width - scroll_margin:
+            self.xview_scroll(1, "units")
+            scrolled = True
+        # Scroll left
+        elif event_x < scroll_margin:
+            self.xview_scroll(-1, "units")
+            scrolled = True
+
+        # Scroll down
+        if event_y > visible_height - scroll_margin:
+            self.yview_scroll(1, "units")
+            scrolled = True
+        # Scroll up
+        elif event_y < scroll_margin:
+            self.yview_scroll(-1, "units")
+            scrolled = True
+
+        return scrolled
+
+    def update_scroll_region_from_shapes(self, shapes) -> None:
+        """Update scroll region to encompass all shapes with padding."""
+        if not shapes:
+            self.canvas_width = self.MIN_CANVAS_WIDTH
+            self.canvas_height = self.MIN_CANVAS_HEIGHT
+        else:
+            max_x = max(shape.x + 200 for shape in shapes)  # Add padding for shape size
+            max_y = max(shape.y + 200 for shape in shapes)
+            self.canvas_width = max(self.MIN_CANVAS_WIDTH, int(max_x + self.EXPANSION_MARGIN))
+            self.canvas_height = max(self.MIN_CANVAS_HEIGHT, int(max_y + self.EXPANSION_MARGIN))
+
+        self.config(scrollregion=(0, 0, self.canvas_width, self.canvas_height))
         self.draw_grid()
 
     def draw_grid(self):
         if not self.show_grid:
             return
         x1, y1 = 0, 0
-        x2, y2 = 2000, 2000
+        x2, y2 = self.canvas_width, self.canvas_height
         self.delete("grid")
         for x in range(0, x2 + 1, self.GRID_SIZE):
             self.create_line(x, y1, x, y2, fill=self.GRID_COLOR, tags="grid")
@@ -141,9 +210,9 @@ class DiagramCanvas(tk.Canvas):
     def draw_alignment_guides(self, guides: dict):
         self.delete("guide")
         for x in guides.get('vertical', []):
-            self.create_line(x, 0, x, 2000, fill=self.GUIDE_COLOR, width=1, dash=(4, 4), tags="guide")
+            self.create_line(x, 0, x, self.canvas_height, fill=self.GUIDE_COLOR, width=1, dash=(4, 4), tags="guide")
         for y in guides.get('horizontal', []):
-            self.create_line(0, y, 2000, y, fill=self.GUIDE_COLOR, width=1, dash=(4, 4), tags="guide")
+            self.create_line(0, y, self.canvas_width, y, fill=self.GUIDE_COLOR, width=1, dash=(4, 4), tags="guide")
 
     def clear_alignment_guides(self):
         self.delete("guide")
@@ -166,6 +235,19 @@ class DiagramCanvas(tk.Canvas):
 
     def update_connection(self, connection: Connection):
         self.draw_connection(connection)
+
+    def move_items(self, shape: Shape, dx: float, dy: float):
+        """Move shape's canvas items by dx, dy - much faster than redrawing."""
+        if shape.shape_id is not None:
+            self.move(shape.shape_id, dx, dy)
+        if shape.text_id is not None:
+            self.move(shape.text_id, dx, dy)
+
+    def update_connections_for_shapes(self, shapes: List[Shape], diagram):
+        """Update only connections attached to the given shapes."""
+        for conn in diagram.connections:
+            if conn.from_shape in shapes or conn.to_shape in shapes:
+                self.draw_connection(conn)
 
     def toggle_grid(self):
         self.show_grid = not self.show_grid

@@ -152,6 +152,7 @@ class DiamondStep(Shape):
         super().__init__(x, y, "diamond")
         self.text = "Activity"
         self.step_description = ""
+        self.tools = ""
         self.image_path = ""
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
@@ -175,11 +176,16 @@ class DiamondStep(Shape):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({"step_description": self.step_description, "image_path": self.image_path})
+        data.update({
+            "step_description": self.step_description,
+            "tools": self.tools,
+            "image_path": self.image_path
+        })
         return data
 
     def load_properties(self, data: dict):
         self.step_description = data.get("step_description", "")
+        self.tools = data.get("tools", "")
         self.image_path = data.get("image_path", "")
 
 
@@ -194,6 +200,8 @@ class ComponentBox(Shape):
         self.color = ""
         self.material = ""
         self.weight = ""
+        self.weight_unit = "g"
+        self.is_leaf_node = False
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         half_w = self.WIDTH / 2
@@ -220,7 +228,9 @@ class ComponentBox(Shape):
             "component_name": self.component_name,
             "color": self.color,
             "material": self.material,
-            "weight": self.weight
+            "weight": self.weight,
+            "weight_unit": self.weight_unit,
+            "is_leaf_node": self.is_leaf_node
         })
         return data
 
@@ -229,6 +239,8 @@ class ComponentBox(Shape):
         self.color = data.get("color", "")
         self.material = data.get("material", "")
         self.weight = data.get("weight", "")
+        self.weight_unit = data.get("weight_unit", "g")
+        self.is_leaf_node = data.get("is_leaf_node", False)
 
 
 class ArrowShape(Shape):
@@ -332,3 +344,18 @@ class ArrowShape(Shape):
         self.end_y = data.get("end_y", self.y)
         self.from_anchor = data.get("from_anchor", "bottom")
         self.to_anchor = data.get("to_anchor", "top")
+        self._from_shape_id = data.get("from_shape_id")
+        self._to_shape_id = data.get("to_shape_id")
+
+    def resolve_shape_references(self, shapes: list):
+        """Resolve shape IDs to actual shape references after all shapes are loaded."""
+        if hasattr(self, '_from_shape_id') and self._from_shape_id is not None:
+            for shape in shapes:
+                if shape.id == self._from_shape_id:
+                    self.from_shape = shape
+                    break
+        if hasattr(self, '_to_shape_id') and self._to_shape_id is not None:
+            for shape in shapes:
+                if shape.id == self._to_shape_id:
+                    self.to_shape = shape
+                    break

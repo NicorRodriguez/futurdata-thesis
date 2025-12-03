@@ -82,9 +82,9 @@ class MainWindow:
 
         ttk.Label(palette_frame, text="Click to add:").pack(anchor="w", pady=(0, 10))
         ttk.Button(palette_frame, text="□ Product Box", command=lambda: self.controller.add_shape("product")).pack(fill="x", pady=2)
+        ttk.Button(palette_frame, text="▭ Component", command=lambda: self.controller.add_shape("component")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="○ Action Circle", command=lambda: self.controller.add_shape("action")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="◇ Diamond Step", command=lambda: self.controller.add_shape("diamond")).pack(fill="x", pady=2)
-        ttk.Button(palette_frame, text="▭ Component", command=lambda: self.controller.add_shape("component")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="→ Arrow", command=lambda: self.controller.add_shape("arrow")).pack(fill="x", pady=2)
 
         canvas_frame = ttk.Frame(main_frame)
@@ -111,11 +111,6 @@ class MainWindow:
         self.status_label = ttk.Label(self.status_bar, text="Ready", padding=(5, 2))
         self.status_label.pack(side="left")
 
-        self.mode_label = ttk.Label(self.status_bar, text="Mode: Select", padding=(5, 2))
-        self.mode_label.pack(side="right")
-
-        ttk.Separator(self.status_bar, orient="vertical").pack(side="right", fill="y")
-
         self.shape_count_label = ttk.Label(self.status_bar, text="Shapes: 0", padding=(5, 2))
         self.shape_count_label.pack(side="right")
 
@@ -132,6 +127,7 @@ class MainWindow:
         self.root.bind('<Control-minus>', lambda e: self.controller.zoom_out())
         self.root.bind('<Control-0>', lambda e: self.controller.reset_zoom())
         self.root.bind('c', lambda e: self.controller.toggle_connect_mode())
+        self.root.bind('<Escape>', lambda e: self.controller.on_escape(e))
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
 
     def update_ui_state(self):
@@ -144,9 +140,6 @@ class MainWindow:
 
     def set_status(self, message: str):
         self.status_label.config(text=message)
-
-    def set_mode(self, mode: str):
-        self.mode_label.config(text=f"Mode: {mode}")
 
     def update_properties_panel(self, shape=None):
         self.properties_panel.load_shape(shape)

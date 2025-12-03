@@ -17,7 +17,7 @@ class Diagram:
             "product_name": "",
             "description": ""
         }
-        self.canvas_size = (2000, 2000)
+        self.canvas_size = None  # Unlimited canvas - size determined dynamically
         self.zoom_level = 1.0
         self.grid_enabled = True
         self.snap_to_grid = True
@@ -130,7 +130,8 @@ class Diagram:
         diagram = Diagram()
         diagram.metadata = data.get("metadata", diagram.metadata)
         diagram_data = data.get("diagram", {})
-        diagram.canvas_size = tuple(diagram_data.get("canvas_size", (2000, 2000)))
+        canvas_size_data = diagram_data.get("canvas_size")
+        diagram.canvas_size = tuple(canvas_size_data) if canvas_size_data else None
         diagram.zoom_level = diagram_data.get("zoom_level", 1.0)
         diagram.grid_enabled = diagram_data.get("grid_enabled", True)
         diagram.snap_to_grid = diagram_data.get("snap_to_grid", True)
@@ -143,6 +144,10 @@ class Diagram:
             diagram.shapes.append(shape)
             if shape.id >= Shape._id_counter:
                 Shape._id_counter = shape.id
+
+        for shape in diagram.shapes:
+            if hasattr(shape, 'resolve_shape_references'):
+                shape.resolve_shape_references(diagram.shapes)
 
         for conn_data in data.get("connections", []):
             connection = Connection.from_dict(conn_data, diagram.shapes)

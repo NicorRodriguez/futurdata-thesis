@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, colorchooser
+from tkinter import ttk
 from typing import Optional, Callable
 
 from ..models import Shape, ProductBox, ActionCircle, DiamondStep, ComponentBox
@@ -60,37 +60,54 @@ class PropertiesPanel(ttk.Frame):
         ttk.Label(self.diamond_frame, text="Description:").grid(row=0, column=0, sticky="w", pady=2)
         self.step_desc_entry = ttk.Entry(self.diamond_frame, width=25)
         self.step_desc_entry.grid(row=0, column=1, sticky="ew", pady=2)
-        ttk.Label(self.diamond_frame, text="Image Path:").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Label(self.diamond_frame, text="Tools:").grid(row=1, column=0, sticky="w", pady=2)
+        self.diamond_tools_entry = ttk.Entry(self.diamond_frame, width=25)
+        self.diamond_tools_entry.grid(row=1, column=1, sticky="ew", pady=2)
+        ttk.Label(self.diamond_frame, text="Image Path:").grid(row=2, column=0, sticky="w", pady=2)
         image_frame = ttk.Frame(self.diamond_frame)
-        image_frame.grid(row=1, column=1, sticky="ew", pady=2)
+        image_frame.grid(row=2, column=1, sticky="ew", pady=2)
         self.image_path_entry = ttk.Entry(image_frame)
         self.image_path_entry.pack(side="left", fill="x", expand=True)
         ttk.Button(image_frame, text="Browse...", width=8).pack(side="right")
 
         self.component_frame = ttk.LabelFrame(self, text="Component Info", padding=5)
-        ttk.Label(self.component_frame, text="Name:").grid(row=0, column=0, sticky="w", pady=2)
-        self.component_name_entry = ttk.Entry(self.component_frame, width=25)
-        self.component_name_entry.grid(row=0, column=1, sticky="ew", pady=2)
-        ttk.Label(self.component_frame, text="Color:").grid(row=1, column=0, sticky="w", pady=2)
-        color_frame = ttk.Frame(self.component_frame)
-        color_frame.grid(row=1, column=1, sticky="ew", pady=2)
-        self.color_entry = ttk.Entry(color_frame)
-        self.color_entry.pack(side="left", fill="x", expand=True)
-        self.color_button = ttk.Button(color_frame, text="🎨", width=3, command=self._choose_color)
-        self.color_button.pack(side="right")
-        ttk.Label(self.component_frame, text="Material:").grid(row=2, column=0, sticky="w", pady=2)
-        self.material_combo = ttk.Combobox(
+
+        self.is_leaf_var = tk.BooleanVar()
+        self.leaf_checkbox = ttk.Checkbutton(
             self.component_frame,
+            text="Leaf Node (not disassemblable)",
+            variable=self.is_leaf_var,
+            command=self._on_leaf_checkbox_changed
+        )
+        self.leaf_checkbox.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
+
+        self.leaf_info_frame = ttk.Frame(self.component_frame)
+        self.leaf_info_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        ttk.Label(self.leaf_info_frame, text="Name:").grid(row=0, column=0, sticky="w", pady=2)
+        self.component_name_entry = ttk.Entry(self.leaf_info_frame, width=25)
+        self.component_name_entry.grid(row=0, column=1, sticky="ew", pady=2)
+        ttk.Label(self.leaf_info_frame, text="Material:").grid(row=1, column=0, sticky="w", pady=2)
+        self.material_combo = ttk.Combobox(
+            self.leaf_info_frame,
             values=["Plastic", "Metal", "PCB", "Rubber", "Glass", "Composite", "Other"],
             width=22
         )
-        self.material_combo.grid(row=2, column=1, sticky="ew", pady=2)
-        ttk.Label(self.component_frame, text="Weight:").grid(row=3, column=0, sticky="w", pady=2)
-        weight_frame = ttk.Frame(self.component_frame)
-        weight_frame.grid(row=3, column=1, sticky="ew", pady=2)
-        self.weight_entry = ttk.Entry(weight_frame, width=15)
+        self.material_combo.grid(row=1, column=1, sticky="ew", pady=2)
+        ttk.Label(self.leaf_info_frame, text="Weight:").grid(row=2, column=0, sticky="w", pady=2)
+        weight_frame = ttk.Frame(self.leaf_info_frame)
+        weight_frame.grid(row=2, column=1, sticky="ew", pady=2)
+        self.weight_entry = ttk.Entry(weight_frame, width=10)
         self.weight_entry.pack(side="left")
-        ttk.Label(weight_frame, text="g").pack(side="left", padx=2)
+        self.weight_unit_combo = ttk.Combobox(
+            weight_frame,
+            values=["g", "kg", "mg", "lb", "oz"],
+            width=5
+        )
+        self.weight_unit_combo.pack(side="left", padx=2)
+        self.weight_unit_combo.set("g")
+
+        self.leaf_info_frame.grid_remove()
 
         self.apply_button = ttk.Button(self, text="Apply Changes", command=self._on_apply)
 
@@ -149,17 +166,20 @@ class PropertiesPanel(ttk.Frame):
             self.diamond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
             self.step_desc_entry.delete(0, "end")
             self.step_desc_entry.insert(0, shape.step_description)
+            self.diamond_tools_entry.delete(0, "end")
+            self.diamond_tools_entry.insert(0, shape.tools)
             self.image_path_entry.delete(0, "end")
             self.image_path_entry.insert(0, shape.image_path)
         elif isinstance(shape, ComponentBox):
             self.component_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
+            self.is_leaf_var.set(shape.is_leaf_node)
+            self._update_leaf_info_visibility()
             self.component_name_entry.delete(0, "end")
             self.component_name_entry.insert(0, shape.component_name)
-            self.color_entry.delete(0, "end")
-            self.color_entry.insert(0, shape.color)
             self.material_combo.set(shape.material)
             self.weight_entry.delete(0, "end")
             self.weight_entry.insert(0, shape.weight)
+            self.weight_unit_combo.set(shape.weight_unit)
 
     def _on_apply(self):
         if self.current_shape is None:
@@ -185,14 +205,16 @@ class PropertiesPanel(ttk.Frame):
         elif isinstance(self.current_shape, DiamondStep):
             properties.update({
                 "step_description": self.current_shape.step_description,
+                "tools": self.current_shape.tools,
                 "image_path": self.current_shape.image_path
             })
         elif isinstance(self.current_shape, ComponentBox):
             properties.update({
                 "component_name": self.current_shape.component_name,
-                "color": self.current_shape.color,
                 "material": self.current_shape.material,
-                "weight": self.current_shape.weight
+                "weight": self.current_shape.weight,
+                "weight_unit": self.current_shape.weight_unit,
+                "is_leaf_node": self.current_shape.is_leaf_node
             })
         return properties
 
@@ -209,18 +231,23 @@ class PropertiesPanel(ttk.Frame):
             self.current_shape.tools = self.tools_entry.get()
         elif isinstance(self.current_shape, DiamondStep):
             self.current_shape.step_description = self.step_desc_entry.get()
+            self.current_shape.tools = self.diamond_tools_entry.get()
             self.current_shape.image_path = self.image_path_entry.get()
         elif isinstance(self.current_shape, ComponentBox):
+            self.current_shape.is_leaf_node = self.is_leaf_var.get()
             self.current_shape.component_name = self.component_name_entry.get()
-            self.current_shape.color = self.color_entry.get()
             self.current_shape.material = self.material_combo.get()
             self.current_shape.weight = self.weight_entry.get()
+            self.current_shape.weight_unit = self.weight_unit_combo.get()
 
-    def _choose_color(self):
-        color = colorchooser.askcolor(title="Choose Color")
-        if color[1]:
-            self.color_entry.delete(0, "end")
-            self.color_entry.insert(0, color[1])
+    def _on_leaf_checkbox_changed(self):
+        self._update_leaf_info_visibility()
+
+    def _update_leaf_info_visibility(self):
+        if self.is_leaf_var.get():
+            self.leaf_info_frame.grid()
+        else:
+            self.leaf_info_frame.grid_remove()
 
     def clear(self):
         self.load_shape(None)
