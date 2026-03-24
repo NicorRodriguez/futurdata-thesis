@@ -4,7 +4,7 @@ from typing import Optional
 
 from .canvas_view import DiagramCanvas
 from .properties_panel import PropertiesPanel
-from ..models import ProductBox, ActionCircle, DiamondStep, ComponentBox, ArrowShape
+from ..models import ActionCircle, DiamondStep, ComponentBox, ArrowShape
 
 
 class MainWindow:
@@ -42,6 +42,9 @@ class MainWindow:
         edit_menu.add_separator()
         edit_menu.add_command(label="Delete", accelerator="Del", command=self.controller.delete_selected)
         edit_menu.add_command(label="Select All", accelerator="Ctrl+A", command=self.controller.select_all)
+        edit_menu.add_separator()
+        edit_menu.add_command(label="Add Color...", command=self.controller.show_add_color_dialog)
+        edit_menu.add_command(label="Add Material...", command=self.controller.show_add_material_dialog)
         edit_menu.add_separator()
         edit_menu.add_command(label="Clear Canvas", command=self.controller.clear_canvas)
 
@@ -81,8 +84,9 @@ class MainWindow:
         palette_frame.pack_propagate(False)
 
         ttk.Label(palette_frame, text="Click to add:").pack(anchor="w", pady=(0, 10))
-        ttk.Button(palette_frame, text="□ Product Box", command=lambda: self.controller.add_shape("product")).pack(fill="x", pady=2)
-        ttk.Button(palette_frame, text="▭ Component", command=lambda: self.controller.add_shape("component")).pack(fill="x", pady=2)
+        ttk.Button(palette_frame, text="▭ Root Component", command=lambda: self.controller.add_shape("component_root")).pack(fill="x", pady=2)
+        ttk.Button(palette_frame, text="▭ Leaf Component", command=lambda: self.controller.add_shape("component_leaf")).pack(fill="x", pady=2)
+        ttk.Button(palette_frame, text="▭ Composite Comp.", command=lambda: self.controller.add_shape("component_composite")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="○ Action Circle", command=lambda: self.controller.add_shape("action")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="◇ Diamond Step", command=lambda: self.controller.add_shape("diamond")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="→ Arrow", command=lambda: self.controller.add_shape("arrow")).pack(fill="x", pady=2)
@@ -143,6 +147,9 @@ class MainWindow:
 
     def update_properties_panel(self, shape=None):
         self.properties_panel.load_shape(shape)
+
+    def refresh_properties_panel(self):
+        self.properties_panel.refresh()
 
     def show_about(self):
         messagebox.showinfo(

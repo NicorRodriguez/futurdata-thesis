@@ -1,8 +1,12 @@
 import tkinter as tk
 from typing import Optional, Tuple
 import os
+import sqlite3
 
-from ..models import Diagram, ProductBox, ActionCircle, DiamondStep, ComponentBox, ArrowShape, Connection
+from ..models import Diagram, ActionCircle, DiamondStep, ComponentBox, ArrowShape, Connection
+from ..models.database import get_database
+from ..views.add_color_dialog import AddColorDialog
+from ..views.add_material_dialog import AddMaterialDialog
 from ..utils import (
     CommandHistory, AddShapeCommand, RemoveShapeCommand, MoveShapeCommand,
     AddConnectionCommand, EditShapePropertiesCommand, snap_to_grid,
@@ -16,6 +20,7 @@ class AppController:
         self.diagram = Diagram()
         self.command_history = CommandHistory()
         self.view = None
+        self.db = get_database()
         self.selected_shape = None
         self.dragging = False
         self.drag_start = None
@@ -263,6 +268,7 @@ class AppController:
         arrow.update_from_shapes()
         command = AddShapeCommand(self.diagram, arrow)
         self.command_history.execute(command)
+        self._sync_connection_to_db(from_shape, to_shape)
         self._update_view()
 
     def _create_connection(self, from_shape, to_shape):
@@ -270,7 +276,202 @@ class AppController:
         connection.auto_calculate_anchors()
         command = AddConnectionCommand(self.diagram, connection)
         self.command_history.execute(command)
+        self._sync_connection_to_db(from_shape, to_shape)
         self._update_view()
+
+    def _sync_connection_to_db(self, from_shape, to_shape):
+        """Persist key canvas relationships to DB."""
+        try:
+            # Component -> Circle defines step input.
+            if isinstance(from_shape, ComponentBox) and isinstance(to_shape, ActionCircle):
+                self._ensure_component_db_id(from_shape)
+                self._ensure_step_db_id(to_shape, input_shape=from_shape)
+                return
+
+            # Circle -> Component defines step outputs.
+            if isinstance(from_shape, ActionCircle) and isinstance(to_shape, ComponentBox):
+                step_id = self._ensure_step_db_id(from_shape)
+                component_id = self._ensure_component_db_id(to_shape)
+                if step_id and component_id:
+                    result = self.db.add_component_to_step(step_id, component_id)
+                    if result.get("already_linked"):
+                        self.view.set_status("Output already linked to this step.")
+                return
+
+            # Circle -> Diamond defines step-action mapping.
+            if isinstance(from_shape, ActionCircle) and isinstance(to_shape, DiamondStep):
+                step_id = self._ensure_step_db_id(from_shape)
+                existing_step_id = self._resolve_step_id_for_diamond(to_shape)
+                if existing_step_id is not None and existing_step_id != step_id:
+                    self.view.set_status("Action belongs to another step.")
+                    return
+                action_id = self._ensure_action_db_id(to_shape)
+                result = self.db.add_action_to_step(step_id, action_id)
+                to_shape.db_step_id = step_id
+                to_shape.db_action_id = action_id
+                to_shape.db_step_action_id = result["link_id"]
+                to_shape.db_action_order = result["action_order"]
+                if result.get("already_linked"):
+                    self.view.set_status("Action already linked to this step.")
+                return
+
+            # Diamond -> Diamond encodes action sequence for the same step.
+            if isinstance(from_shape, DiamondStep) and isinstance(to_shape, DiamondStep):
+                step_id = self._resolve_step_id_for_diamond(from_shape)
+                if step_id is None:
+                    raise ValueError("Connect circle to first diamond before chaining actions")
+                target_step_id = self._resolve_step_id_for_diamond(to_shape)
+                if target_step_id is not None and target_step_id != step_id:
+                    self.view.set_status("Action belongs to another step.")
+                    return
+
+                action_id = self._ensure_action_db_id(to_shape)
+                result = self.db.add_action_to_step(step_id, action_id)
+                to_shape.db_step_id = step_id
+                to_shape.db_action_id = action_id
+                to_shape.db_step_action_id = result["link_id"]
+                to_shape.db_action_order = result["action_order"]
+                if result.get("already_linked"):
+                    self.view.set_status("Action already linked to this step.")
+                return
+        except sqlite3.IntegrityError:
+            # Ignore duplicate links constrained by unique indexes.
+            pass
+        except Exception as exc:
+            self.view.set_status(f"DB sync warning: {exc}")
+
+    def _ensure_component_db_id(self, shape: ComponentBox) -> Optional[int]:
+        db_id = shape.properties.get("db_id")
+        if db_id:
+            return int(db_id)
+
+        node_type = str(shape.properties.get("node_type", "Intermediate")).strip() or "Intermediate"
+        node_type = node_type.capitalize()
+
+        name = str(shape.properties.get("name") or shape.text or f"{node_type} Component").strip()
+        color_id = shape.properties.get("color_id") or None
+        material_id = shape.properties.get("material_id") or None
+        weight_val = shape.properties.get("weight")
+        try:
+            weight = float(weight_val) if str(weight_val).strip() else None
+        except (TypeError, ValueError):
+            weight = None
+        weight_unit = shape.properties.get("weight_unit") or "g"
+
+        if node_type == "Root":
+            comp_id = self.db.create_component(
+                name=name,
+                color_id=color_id,
+                material_id=material_id,
+                weight=weight,
+                weight_unit=weight_unit,
+                node_type="Root",
+            )
+        else:
+            root_component_id = self._get_root_component_id()
+            if root_component_id is None:
+                raise ValueError("Add a Root Component first so Leaf/Composite can link to it")
+            comp_id = self.db.create_component(
+                name=name,
+                product_id=root_component_id,
+                color_id=color_id,
+                material_id=material_id,
+                weight=weight,
+                weight_unit=weight_unit,
+                node_type=node_type,
+            )
+
+        shape.properties["db_id"] = comp_id
+        return comp_id
+
+    def _get_root_component_id(self) -> Optional[int]:
+        for shape in self.diagram.shapes:
+            if isinstance(shape, ComponentBox):
+                node_type = str(shape.properties.get("node_type", "")).strip().lower()
+                if node_type == "root":
+                    return self._ensure_component_db_id(shape)
+        return None
+
+    def _ensure_step_db_id(self, step_shape: ActionCircle, input_shape: Optional[ComponentBox] = None) -> Optional[int]:
+        step_id = getattr(step_shape, "db_step_id", None)
+        if input_shape is None:
+            input_shape = self._resolve_input_shape_for_step(step_shape)
+
+        if step_id:
+            if input_shape is not None:
+                component_id = self._ensure_component_db_id(input_shape)
+                self.db.update_step(int(step_id), component_id=component_id)
+            return int(step_id)
+
+        if input_shape is None:
+            for shape in self.diagram.shapes:
+                if isinstance(shape, ComponentBox) and str(shape.properties.get("node_type", "")).strip().lower() == "root":
+                    input_shape = shape
+                    break
+
+        if input_shape is None:
+            raise ValueError("Step needs an input component (connect a component to the circle first)")
+
+        component_id = self._ensure_component_db_id(input_shape)
+        step_order = self.db.get_next_step_order(component_id)
+        title = str(step_shape.text or "Disassembly Step").strip()
+        description = str(step_shape.step_description or "").strip()
+        image_path = str(step_shape.image_path or "").strip()
+
+        step_id = self.db.create_step(
+            component_id=component_id,
+            step_order=step_order,
+            description=description,
+            image_path=image_path,
+            action_id=None,
+            title=title,
+        )
+        # Keep display text/title aligned.
+        step_shape.text = title
+        step_shape.db_step_id = step_id
+        return step_id
+
+    def _resolve_input_shape_for_step(self, step_shape: ActionCircle) -> Optional[ComponentBox]:
+        for conn in self.diagram.connections:
+            if conn.to_shape == step_shape and isinstance(conn.from_shape, ComponentBox):
+                return conn.from_shape
+
+        for shape in self.diagram.shapes:
+            if isinstance(shape, ComponentBox) and str(shape.properties.get("node_type", "")).strip().lower() == "root":
+                return shape
+        return None
+
+    def _ensure_action_db_id(self, action_shape: DiamondStep) -> Optional[int]:
+        action_id = getattr(action_shape, "db_action_id", None)
+        if action_id:
+            return int(action_id)
+
+        action_name = str(action_shape.name or action_shape.text or "Action").strip()
+        tool_val = str(action_shape.tools or "").strip()
+        action_id = self.db.create_action(name=action_name, description="", tool_id=None)
+        action_shape.db_action_id = action_id
+        if action_shape.name:
+            action_shape.text = action_shape.name
+        else:
+            action_shape.name = action_name
+            action_shape.text = action_name
+        if tool_val:
+            action_shape.tools = tool_val
+        return action_id
+
+    def _resolve_step_id_for_diamond(self, diamond_shape: DiamondStep) -> Optional[int]:
+        step_id = getattr(diamond_shape, "db_step_id", None)
+        if step_id:
+            return int(step_id)
+
+        # Try to infer from an incoming circle->diamond connection.
+        for conn in self.diagram.connections:
+            if conn.to_shape == diamond_shape and isinstance(conn.from_shape, ActionCircle):
+                inferred = self._ensure_step_db_id(conn.from_shape)
+                if inferred:
+                    diamond_shape.db_step_id = inferred
+                    return inferred
+        return None
 
     def _edit_shape_properties(self, shape):
         self.diagram.select_shape(shape, multi_select=False)
@@ -280,21 +481,16 @@ class AppController:
         new_shape = self._create_shape_instance(shape.shape_type, shape.x + 50, shape.y + 50)
         new_shape.text = shape.text
 
-        if isinstance(shape, ProductBox):
-            new_shape.brand = shape.brand
-            new_shape.model = shape.model
-        elif isinstance(shape, ActionCircle):
+        if isinstance(shape, ActionCircle):
+            new_shape.step_description = shape.step_description
+            new_shape.image_path = shape.image_path
+            new_shape.tools = shape.tools
+        elif isinstance(shape, DiamondStep):
             new_shape.action_id = shape.action_id
             new_shape.name = shape.name
             new_shape.tools = shape.tools
-        elif isinstance(shape, DiamondStep):
-            new_shape.step_description = shape.step_description
-            new_shape.image_path = shape.image_path
         elif isinstance(shape, ComponentBox):
-            new_shape.component_name = shape.component_name
-            new_shape.color = shape.color
-            new_shape.material = shape.material
-            new_shape.weight = shape.weight
+            new_shape.properties = dict(shape.properties)
 
         command = AddShapeCommand(self.diagram, new_shape)
         self.command_history.execute(command)
@@ -302,10 +498,57 @@ class AppController:
         self.view.set_status(f"Duplicated {shape.shape_type}")
 
     def _delete_shape(self, shape):
+        if self._is_shape_connected(shape):
+            self.view.set_status("Cannot delete: shape is connected. Remove arrows/connections first.")
+            return
+
+        if not self._delete_shape_from_db(shape):
+            return
+
         command = RemoveShapeCommand(self.diagram, shape)
         self.command_history.execute(command)
         self._update_view()
         self.view.set_status(f"Deleted {shape.shape_type}")
+
+    def _is_shape_connected(self, shape) -> bool:
+        """Return True if shape is linked via connection lines or arrow shapes."""
+        if isinstance(shape, ArrowShape):
+            return False
+
+        if self.diagram.get_connections_for_shape(shape):
+            return True
+
+        for s in self.diagram.shapes:
+            if isinstance(s, ArrowShape) and (s.from_shape == shape or s.to_shape == shape):
+                return True
+        return False
+
+    def _delete_shape_from_db(self, shape) -> bool:
+        """Delete corresponding DB entity for a shape if it exists.
+
+        Action ordering is not compacted after deletes. If an action link is removed,
+        remaining action_order values keep their original numbers and future inserts append.
+        """
+        try:
+            if isinstance(shape, ComponentBox):
+                db_id = shape.properties.get("db_id")
+                if db_id:
+                    self.db.delete_component(int(db_id))
+            elif isinstance(shape, ActionCircle):
+                step_id = getattr(shape, "db_step_id", None)
+                if step_id:
+                    self.db.delete_step(int(step_id))
+            elif isinstance(shape, DiamondStep):
+                action_id = getattr(shape, "db_action_id", None)
+                if action_id:
+                    self.db.delete_action(int(action_id))
+            return True
+        except sqlite3.IntegrityError:
+            self.view.set_status("Cannot delete in DB due to existing references.")
+            return False
+        except Exception as exc:
+            self.view.set_status(f"DB delete failed: {exc}")
+            return False
 
     def _start_connection_from(self, shape):
         self.connect_mode = True
@@ -313,6 +556,9 @@ class AppController:
         self.view.set_status(f"Connection started from {shape.shape_type}. Click target shape.")
 
     def add_shape(self, shape_type: str):
+        if shape_type == "product":
+            shape_type = "component_root"
+
         if shape_type == "arrow":
             self.arrow_mode = True
             self.connecting_from = None
@@ -321,20 +567,35 @@ class AppController:
 
         x, y = 700, 400
         shape = self._create_shape_instance(shape_type, x, y)
+
+        # Handle specialized component types
+        if shape_type.startswith("component_"):
+            requested = shape_type.split('_')[1].lower()
+            node_type_map = {
+                "root": "Root",
+                "leaf": "Leaf",
+                "composite": "Intermediate",
+            }
+            node_type = node_type_map.get(requested, "Intermediate")
+            shape.properties['node_type'] = node_type
+            if requested == "root":
+                shape.properties.setdefault("name", "Root Component")
+                shape.text = shape.properties.get("name") or "Root Component"
+            self.view.set_status(f"Added {requested.capitalize()} Component")
+        else:
+            self.view.set_status(f"Added {shape_type}")
+
         command = AddShapeCommand(self.diagram, shape)
         self.command_history.execute(command)
         self.diagram.select_shape(shape, multi_select=False)
         self._update_view()
-        self.view.set_status(f"Added {shape_type}")
 
     def _create_shape_instance(self, shape_type: str, x: float, y: float):
-        if shape_type == "product":
-            return ProductBox(x, y)
-        elif shape_type == "action":
+        if shape_type == "action":
             return ActionCircle(x, y)
         elif shape_type == "diamond":
             return DiamondStep(x, y)
-        elif shape_type == "component":
+        elif shape_type.startswith("component"):
             return ComponentBox(x, y)
         elif shape_type == "arrow":
             return ArrowShape(x, y)
@@ -352,7 +613,17 @@ class AppController:
             self.connect_mode = False
             self.connecting_from = None
 
-        for shape in list(self.diagram.selected_shapes):
+        selected = list(self.diagram.selected_shapes)
+        blocked = [shape for shape in selected if self._is_shape_connected(shape)]
+        if blocked:
+            self.view.set_status("Cannot delete connected shape(s). Remove arrows/connections first.")
+            return
+
+        for shape in selected:
+            if not self._delete_shape_from_db(shape):
+                return
+
+        for shape in selected:
             command = RemoveShapeCommand(self.diagram, shape)
             self.command_history.execute(command)
 
@@ -499,6 +770,22 @@ class AppController:
             return True
         else:
             return False
+
+    def show_add_color_dialog(self):
+        AddColorDialog(self.view.root, self)
+
+    def add_new_color(self, name, hex_code, r, g, b):
+        self.db.create_color(name, hex_code, r, g, b)
+        self.view.refresh_properties_panel()
+        self.view.set_status(f"Added new color: {name}")
+
+    def show_add_material_dialog(self):
+        AddMaterialDialog(self.view.root, self)
+
+    def add_new_material(self, name, sci_name, color_id):
+        self.db.create_material(name, sci_name, color_id)
+        self.view.refresh_properties_panel()
+        self.view.set_status(f"Added new material: {name}")
 
     def _update_view(self):
         self.view.canvas.redraw_all(self.diagram)

@@ -3,7 +3,7 @@ from tkinter import ttk
 from typing import Optional, List, Tuple
 import math
 
-from ..models import Shape, ProductBox, ActionCircle, DiamondStep, ComponentBox, ArrowShape, Connection
+from ..models import Shape, ActionCircle, DiamondStep, ComponentBox, ArrowShape, Connection
 from ..utils.geometry import get_arrow_points
 
 
@@ -12,8 +12,6 @@ class DiagramCanvas(tk.Canvas):
     GRID_COLOR = "#e0e0e0"
     SELECT_COLOR = "#667eea"
     GUIDE_COLOR = "#ff6b6b"
-    PRODUCT_FILL = "#90EE90"
-    PRODUCT_TEXT_COLOR = "#00cc00"
     ACTION_FILL = "white"
     DIAMOND_FILL = "white"
     COMPONENT_FILL = "white"
@@ -116,9 +114,7 @@ class DiagramCanvas(tk.Canvas):
         if shape.text_id is not None:
             self.delete(shape.text_id)
 
-        if isinstance(shape, ProductBox):
-            self._draw_product_box(shape)
-        elif isinstance(shape, ActionCircle):
+        if isinstance(shape, ActionCircle):
             self._draw_action_circle(shape)
         elif isinstance(shape, DiamondStep):
             self._draw_diamond_step(shape)
@@ -129,17 +125,6 @@ class DiagramCanvas(tk.Canvas):
 
         if shape.selected:
             self._draw_selection(shape)
-
-    def _draw_product_box(self, shape: ProductBox):
-        x1, y1, x2, y2 = shape.get_bounds()
-        border_width = 3 if shape.selected else 2
-        border_color = self.SELECT_COLOR if shape.selected else self.BORDER_COLOR
-        shape.shape_id = self.create_rectangle(
-            x1, y1, x2, y2, fill=self.PRODUCT_FILL, outline=border_color, width=border_width, tags="shape"
-        )
-        shape.text_id = self.create_text(
-            shape.x, shape.y, text=shape.text, font=("Arial", 10, "bold"), fill=self.PRODUCT_TEXT_COLOR, tags="shape_text"
-        )
 
     def _draw_action_circle(self, shape: ActionCircle):
         x1, y1, x2, y2 = shape.get_bounds()

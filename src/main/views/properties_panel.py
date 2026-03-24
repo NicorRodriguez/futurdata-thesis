@@ -1,116 +1,56 @@
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, Any, List
 
-from ..models import Shape, ProductBox, ActionCircle, DiamondStep, ComponentBox
+from ..models import Shape, ActionCircle, DiamondStep, ComponentBox
+from ..models.database import get_database
 
 
 class PropertiesPanel(ttk.Frame):
+    """
+    Dynamic Properties Panel that loads fields from database schema.
+
+    Benefits:
+    - Add new column to database = new field appears in UI automatically
+    - No code changes needed for new properties
+    - Consistent with database schema
+    """
+
     def __init__(self, parent, on_apply_callback: Optional[Callable] = None):
         super().__init__(parent, padding=10)
         self.on_apply_callback = on_apply_callback
         self.current_shape: Optional[Shape] = None
+        self.db = get_database()
+
+        # Store dynamic field widgets
+        self.dynamic_fields: Dict[str, Any] = {}
+
         self._create_widgets()
 
     def _create_widgets(self):
+        # Title
         title = ttk.Label(self, text="Properties", font=("Arial", 12, "bold"))
         title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
+        # Shape ID (read-only)
         ttk.Label(self, text="Shape ID:").grid(row=1, column=0, sticky="w", pady=2)
-        self.id_label = ttk.Label(self, text="-", foreground="gray")
+        self.id_label = ttk.Label(self, text="-", foreground="blue", font=("Arial", 9, "bold"))
         self.id_label.grid(row=1, column=1, sticky="w", pady=2)
 
+        # Shape Type (read-only)
         ttk.Label(self, text="Type:").grid(row=2, column=0, sticky="w", pady=2)
         self.type_label = ttk.Label(self, text="-", foreground="gray")
         self.type_label.grid(row=2, column=1, sticky="w", pady=2)
 
         ttk.Separator(self, orient="horizontal").grid(row=3, column=0, columnspan=2, sticky="ew", pady=10)
 
-        ttk.Label(self, text="Text:").grid(row=4, column=0, sticky="nw", pady=2)
-        text_frame = ttk.Frame(self)
-        text_frame.grid(row=4, column=1, sticky="ew", pady=2)
+        # Dynamic properties frame - will be populated based on shape type
+        self.properties_frame = ttk.LabelFrame(self, text="Properties", padding=5)
 
-        self.text_entry = tk.Text(text_frame, height=4, width=25, font=("Arial", 9))
-        self.text_entry.pack(side="left", fill="both", expand=True)
-
-        text_scroll = ttk.Scrollbar(text_frame, command=self.text_entry.yview)
-        text_scroll.pack(side="right", fill="y")
-        self.text_entry.config(yscrollcommand=text_scroll.set)
-
-        self.product_frame = ttk.LabelFrame(self, text="Product Info", padding=5)
-        ttk.Label(self.product_frame, text="Brand:").grid(row=0, column=0, sticky="w", pady=2)
-        self.brand_entry = ttk.Entry(self.product_frame, width=25)
-        self.brand_entry.grid(row=0, column=1, sticky="ew", pady=2)
-        ttk.Label(self.product_frame, text="Model:").grid(row=1, column=0, sticky="w", pady=2)
-        self.model_entry = ttk.Entry(self.product_frame, width=25)
-        self.model_entry.grid(row=1, column=1, sticky="ew", pady=2)
-
-        self.action_frame = ttk.LabelFrame(self, text="Action Info", padding=5)
-        ttk.Label(self.action_frame, text="Action ID:").grid(row=0, column=0, sticky="w", pady=2)
-        self.action_id_entry = ttk.Entry(self.action_frame, width=25)
-        self.action_id_entry.grid(row=0, column=1, sticky="ew", pady=2)
-        ttk.Label(self.action_frame, text="Name:").grid(row=1, column=0, sticky="w", pady=2)
-        self.action_name_entry = ttk.Entry(self.action_frame, width=25)
-        self.action_name_entry.grid(row=1, column=1, sticky="ew", pady=2)
-        ttk.Label(self.action_frame, text="Tools:").grid(row=2, column=0, sticky="w", pady=2)
-        self.tools_entry = ttk.Entry(self.action_frame, width=25)
-        self.tools_entry.grid(row=2, column=1, sticky="ew", pady=2)
-
-        self.diamond_frame = ttk.LabelFrame(self, text="Step Info", padding=5)
-        ttk.Label(self.diamond_frame, text="Description:").grid(row=0, column=0, sticky="w", pady=2)
-        self.step_desc_entry = ttk.Entry(self.diamond_frame, width=25)
-        self.step_desc_entry.grid(row=0, column=1, sticky="ew", pady=2)
-        ttk.Label(self.diamond_frame, text="Tools:").grid(row=1, column=0, sticky="w", pady=2)
-        self.diamond_tools_entry = ttk.Entry(self.diamond_frame, width=25)
-        self.diamond_tools_entry.grid(row=1, column=1, sticky="ew", pady=2)
-        ttk.Label(self.diamond_frame, text="Image Path:").grid(row=2, column=0, sticky="w", pady=2)
-        image_frame = ttk.Frame(self.diamond_frame)
-        image_frame.grid(row=2, column=1, sticky="ew", pady=2)
-        self.image_path_entry = ttk.Entry(image_frame)
-        self.image_path_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(image_frame, text="Browse...", width=8).pack(side="right")
-
-        self.component_frame = ttk.LabelFrame(self, text="Component Info", padding=5)
-
-        self.is_leaf_var = tk.BooleanVar()
-        self.leaf_checkbox = ttk.Checkbutton(
-            self.component_frame,
-            text="Leaf Node (not disassemblable)",
-            variable=self.is_leaf_var,
-            command=self._on_leaf_checkbox_changed
-        )
-        self.leaf_checkbox.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
-
-        self.leaf_info_frame = ttk.Frame(self.component_frame)
-        self.leaf_info_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
-
-        ttk.Label(self.leaf_info_frame, text="Name:").grid(row=0, column=0, sticky="w", pady=2)
-        self.component_name_entry = ttk.Entry(self.leaf_info_frame, width=25)
-        self.component_name_entry.grid(row=0, column=1, sticky="ew", pady=2)
-        ttk.Label(self.leaf_info_frame, text="Material:").grid(row=1, column=0, sticky="w", pady=2)
-        self.material_combo = ttk.Combobox(
-            self.leaf_info_frame,
-            values=["Plastic", "Metal", "PCB", "Rubber", "Glass", "Composite", "Other"],
-            width=22
-        )
-        self.material_combo.grid(row=1, column=1, sticky="ew", pady=2)
-        ttk.Label(self.leaf_info_frame, text="Weight:").grid(row=2, column=0, sticky="w", pady=2)
-        weight_frame = ttk.Frame(self.leaf_info_frame)
-        weight_frame.grid(row=2, column=1, sticky="ew", pady=2)
-        self.weight_entry = ttk.Entry(weight_frame, width=10)
-        self.weight_entry.pack(side="left")
-        self.weight_unit_combo = ttk.Combobox(
-            weight_frame,
-            values=["g", "kg", "mg", "lb", "oz"],
-            width=5
-        )
-        self.weight_unit_combo.pack(side="left", padx=2)
-        self.weight_unit_combo.set("g")
-
-        self.leaf_info_frame.grid_remove()
-
+        # Apply button
         self.apply_button = ttk.Button(self, text="Apply Changes", command=self._on_apply)
 
+        # Empty state label
         self.empty_label = ttk.Label(
             self, text="Select a shape to\nedit its properties", foreground="gray", justify="center"
         )
@@ -118,14 +58,200 @@ class PropertiesPanel(ttk.Frame):
         self._show_empty_state()
 
     def _show_empty_state(self):
-        self.product_frame.grid_remove()
-        self.action_frame.grid_remove()
-        self.diamond_frame.grid_remove()
-        self.component_frame.grid_remove()
+        """Show empty state when no shape is selected."""
+        self.properties_frame.grid_remove()
         self.apply_button.grid_remove()
         self.empty_label.grid(row=5, column=0, columnspan=2, pady=20)
 
+    def _clear_dynamic_fields(self):
+        """Clear all dynamic field widgets."""
+        for widget in self.properties_frame.winfo_children():
+            widget.destroy()
+        self.dynamic_fields.clear()
+
+    def _create_field_widget(self, parent, field: Dict[str, Any], row: int, value: Any = "") -> Any:
+        """
+        Create appropriate widget based on field type from database.
+
+        Args:
+            parent: Parent frame
+            field: Field info from database schema
+            row: Grid row number
+            value: Current value to populate
+
+        Returns:
+            The created widget
+        """
+        field_name = field['name']
+        field_type = field['type'].upper()
+        display_name = field['display_name']
+        widget_type = field.get('widget_type', 'default')
+
+        # Label
+        ttk.Label(parent, text=f"{display_name}:").grid(row=row, column=0, sticky="w", pady=3)
+
+        # Handle dropdown widget type (from database schema)
+        if widget_type == 'dropdown' and field_name == 'color_id':
+            # Color dropdown populated from database
+            colors = self.db.get_all_colors()
+            color_names = [c['name'] for c in colors]
+            widget = ttk.Combobox(parent, values=color_names, width=22, state="readonly")
+            widget.grid(row=row, column=1, sticky="ew", pady=3)
+            # Store color mapping for lookup
+            widget.color_map = {c['name']: c['id'] for c in colors}
+            widget.color_map_reverse = {c['id']: c['name'] for c in colors}
+            # Set current value by color_id
+            if value and value in widget.color_map_reverse:
+                widget.set(widget.color_map_reverse[value])
+            elif colors:
+                widget.set("")  # Empty by default
+        
+        elif widget_type == 'dropdown' and field_name == 'material_id':
+            # Material dropdown populated from database
+            materials = self.db.get_all_materials()
+            material_names = [m['name'] for m in materials]
+            widget = ttk.Combobox(parent, values=material_names, width=22, state="readonly")
+            widget.grid(row=row, column=1, sticky="ew", pady=3)
+            # Store material mapping for lookup
+            widget.material_map = {m['name']: m['id'] for m in materials}
+            widget.material_map_reverse = {m['id']: m['name'] for m in materials}
+            # Set current value by material_id
+            if value and value in widget.material_map_reverse:
+                widget.set(widget.material_map_reverse[value])
+            elif materials:
+                widget.set("")  # Empty by default
+
+        elif field_name == 'node_type':
+            # Read-only label for node type
+            widget = ttk.Label(parent, text=str(value) if value else "Intermediate", font=("Arial", 9, "italic"))
+            widget.grid(row=row, column=1, sticky="ew", pady=3)
+
+        # Create appropriate widget based on type
+        elif field_type == 'BOOLEAN':
+            # Checkbox for boolean
+            var = tk.BooleanVar(value=bool(value))
+            widget = ttk.Checkbutton(parent, variable=var)
+            widget.grid(row=row, column=1, sticky="w", pady=3)
+            widget.var = var  # Store reference to variable
+
+        elif field_type == 'TEXT':
+            # Multi-line text for TEXT type
+            frame = ttk.Frame(parent)
+            frame.grid(row=row, column=1, sticky="ew", pady=3)
+            widget = tk.Text(frame, height=3, width=20, font=("Arial", 9))
+            widget.pack(side="left", fill="both", expand=True)
+            scroll = ttk.Scrollbar(frame, command=widget.yview)
+            scroll.pack(side="right", fill="y")
+            widget.config(yscrollcommand=scroll.set)
+            widget.insert("1.0", str(value) if value else "")
+
+        elif 'DECIMAL' in field_type or 'REAL' in field_type:
+            # Number entry (but not INT since color_id is INT with dropdown)
+            widget = ttk.Entry(parent, width=25)
+            widget.grid(row=row, column=1, sticky="ew", pady=3)
+            widget.insert(0, str(value) if value else "")
+
+        elif field_name == 'weight_unit':
+            # Combobox for weight unit
+            widget = ttk.Combobox(
+                parent,
+                values=["g", "kg", "mg", "lb", "oz"],
+                width=22
+            )
+            widget.grid(row=row, column=1, sticky="ew", pady=3)
+            widget.set(str(value) if value else "g")
+
+        else:
+            # Default: Entry widget
+            widget = ttk.Entry(parent, width=25)
+            widget.grid(row=row, column=1, sticky="ew", pady=3)
+            widget.insert(0, str(value) if value else "")
+
+        return widget
+
+    def _get_widget_value(self, widget, field_name: str = None) -> Any:
+        """Get value from a widget regardless of type."""
+        if isinstance(widget, ttk.Checkbutton):
+            return widget.var.get()
+        elif isinstance(widget, tk.Text):
+            return widget.get("1.0", "end-1c")
+        elif isinstance(widget, ttk.Combobox):
+            value = widget.get()
+            # Handle color dropdown - return color_id
+            if hasattr(widget, 'color_map') and value in widget.color_map:
+                return widget.color_map[value]
+            # Handle material dropdown - return material_id
+            if hasattr(widget, 'material_map') and value in widget.material_map:
+                return widget.material_map[value]
+            return value
+        elif isinstance(widget, ttk.Entry):
+            return widget.get()
+        return None
+
+    def _load_component_properties(self, shape: ComponentBox):
+        """Load component properties dynamically from database schema."""
+        self._clear_dynamic_fields()
+
+        node_type = str(shape.properties.get('node_type', '')).strip().lower()
+        if node_type == "root":
+            component_kind = "root"
+        elif node_type == "leaf":
+            component_kind = "leaf"
+        else:
+            # "composite" and empty both map to intermediate table schema.
+            component_kind = "intermediate"
+
+        # Load fields from the correct database component table.
+        fields = self.db.get_component_fields(component_kind)
+
+        # Create widgets for each field - directly from shape.properties dict
+        # No hardcoded mapping needed!
+        for row, field in enumerate(fields):
+            field_name = field['name']
+            # Get value directly from shape's properties dict
+            value = shape.properties.get(field_name, "")
+            widget = self._create_field_widget(self.properties_frame, field, row, value)
+            self.dynamic_fields[field_name] = widget
+
+    def _load_action_properties(self, shape: DiamondStep):
+        """Load action properties dynamically from database schema."""
+        self._clear_dynamic_fields()
+
+        fields = self.db.get_action_fields()
+
+        shape_values = {
+            'name': shape.name,
+            'description': '',
+            'tools': shape.tools
+        }
+
+        for row, field in enumerate(fields):
+            field_name = field['name']
+            value = shape_values.get(field_name, "")
+            widget = self._create_field_widget(self.properties_frame, field, row, value)
+            self.dynamic_fields[field_name] = widget
+
+    def _load_step_properties(self, shape: ActionCircle):
+        """Load step properties dynamically from database schema."""
+        self._clear_dynamic_fields()
+
+        fields = self.db.get_step_fields()
+
+        shape_values = {
+            'step_order': 1,
+            'description': shape.step_description,
+            'tools': shape.tools,
+            'image_path': shape.image_path
+        }
+
+        for row, field in enumerate(fields):
+            field_name = field['name']
+            value = shape_values.get(field_name, "")
+            widget = self._create_field_widget(self.properties_frame, field, row, value)
+            self.dynamic_fields[field_name] = widget
+
     def load_shape(self, shape: Optional[Shape]):
+        """Load shape properties into the panel."""
         self.current_shape = shape
 
         if shape is None:
@@ -135,119 +261,101 @@ class PropertiesPanel(ttk.Frame):
             return
 
         self.empty_label.grid_remove()
-        self.apply_button.grid(row=10, column=0, columnspan=2, pady=10, sticky="ew")
 
+        # Show shape ID and type
         self.id_label.config(text=f"#{shape.id}")
         self.type_label.config(text=shape.shape_type.capitalize())
 
-        self.text_entry.delete("1.0", "end")
-        self.text_entry.insert("1.0", shape.text)
+        # Show properties frame
+        self.properties_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=5)
+        self.apply_button.grid(row=10, column=0, columnspan=2, pady=10, sticky="ew")
 
-        self.product_frame.grid_remove()
-        self.action_frame.grid_remove()
-        self.diamond_frame.grid_remove()
-        self.component_frame.grid_remove()
-
-        if isinstance(shape, ProductBox):
-            self.product_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
-            self.brand_entry.delete(0, "end")
-            self.brand_entry.insert(0, shape.brand)
-            self.model_entry.delete(0, "end")
-            self.model_entry.insert(0, shape.model)
+        # Load properties based on shape type
+        if isinstance(shape, ComponentBox):
+            self.properties_frame.config(text="Component Properties")
+            self._load_component_properties(shape)
         elif isinstance(shape, ActionCircle):
-            self.action_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
-            self.action_id_entry.delete(0, "end")
-            self.action_id_entry.insert(0, shape.action_id)
-            self.action_name_entry.delete(0, "end")
-            self.action_name_entry.insert(0, shape.name)
-            self.tools_entry.delete(0, "end")
-            self.tools_entry.insert(0, shape.tools)
+            self.properties_frame.config(text="Step Properties")
+            self._load_step_properties(shape)
         elif isinstance(shape, DiamondStep):
-            self.diamond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
-            self.step_desc_entry.delete(0, "end")
-            self.step_desc_entry.insert(0, shape.step_description)
-            self.diamond_tools_entry.delete(0, "end")
-            self.diamond_tools_entry.insert(0, shape.tools)
-            self.image_path_entry.delete(0, "end")
-            self.image_path_entry.insert(0, shape.image_path)
-        elif isinstance(shape, ComponentBox):
-            self.component_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
-            self.is_leaf_var.set(shape.is_leaf_node)
-            self._update_leaf_info_visibility()
-            self.component_name_entry.delete(0, "end")
-            self.component_name_entry.insert(0, shape.component_name)
-            self.material_combo.set(shape.material)
-            self.weight_entry.delete(0, "end")
-            self.weight_entry.insert(0, shape.weight)
-            self.weight_unit_combo.set(shape.weight_unit)
+            self.properties_frame.config(text="Action Properties")
+            self._load_action_properties(shape)
+        else:
+            # Arrow or unknown type - show minimal properties
+            self._clear_dynamic_fields()
+            self.properties_frame.config(text="Properties")
 
     def _on_apply(self):
+        """Apply changes to the shape."""
         if self.current_shape is None:
             return
+
         old_properties = self._get_current_properties()
         self._update_shape_properties()
         new_properties = self._get_current_properties()
+
         if self.on_apply_callback:
             self.on_apply_callback(self.current_shape, old_properties, new_properties)
 
     def _get_current_properties(self) -> dict:
+        """Get current properties of the shape."""
         if self.current_shape is None:
             return {}
+
         properties = {"text": self.current_shape.text}
-        if isinstance(self.current_shape, ProductBox):
-            properties.update({"brand": self.current_shape.brand, "model": self.current_shape.model})
-        elif isinstance(self.current_shape, ActionCircle):
-            properties.update({
-                "action_id": self.current_shape.action_id,
-                "name": self.current_shape.name,
-                "tools": self.current_shape.tools
-            })
-        elif isinstance(self.current_shape, DiamondStep):
+
+        if isinstance(self.current_shape, ActionCircle):
             properties.update({
                 "step_description": self.current_shape.step_description,
                 "tools": self.current_shape.tools,
                 "image_path": self.current_shape.image_path
             })
-        elif isinstance(self.current_shape, ComponentBox):
+        elif isinstance(self.current_shape, DiamondStep):
             properties.update({
-                "component_name": self.current_shape.component_name,
-                "material": self.current_shape.material,
-                "weight": self.current_shape.weight,
-                "weight_unit": self.current_shape.weight_unit,
-                "is_leaf_node": self.current_shape.is_leaf_node
+                "action_id": self.current_shape.action_id,
+                "name": self.current_shape.name,
+                "tools": self.current_shape.tools
             })
+        elif isinstance(self.current_shape, ComponentBox):
+            # FULLY DYNAMIC - get all properties from shape's properties dict
+            properties.update(self.current_shape.properties)
         return properties
 
     def _update_shape_properties(self):
+        """Update shape properties from widget values."""
         if self.current_shape is None:
             return
-        self.current_shape.text = self.text_entry.get("1.0", "end-1c")
-        if isinstance(self.current_shape, ProductBox):
-            self.current_shape.brand = self.brand_entry.get()
-            self.current_shape.model = self.model_entry.get()
+
+        if isinstance(self.current_shape, ComponentBox):
+            # FULLY DYNAMIC - write all fields directly to shape.properties dict
+            for field_name, widget in self.dynamic_fields.items():
+                value = self._get_widget_value(widget)
+                self.current_shape.properties[field_name] = value
+
+            # Update display text with name
+            if 'name' in self.current_shape.properties:
+                self.current_shape.text = self.current_shape.properties['name']
+
         elif isinstance(self.current_shape, ActionCircle):
-            self.current_shape.action_id = self.action_id_entry.get()
-            self.current_shape.name = self.action_name_entry.get()
-            self.current_shape.tools = self.tools_entry.get()
+            if 'description' in self.dynamic_fields:
+                self.current_shape.step_description = self._get_widget_value(self.dynamic_fields['description'])
+                self.current_shape.text = self.current_shape.step_description
+            if 'tools' in self.dynamic_fields:
+                self.current_shape.tools = self._get_widget_value(self.dynamic_fields['tools'])
+            if 'image_path' in self.dynamic_fields:
+                self.current_shape.image_path = self._get_widget_value(self.dynamic_fields['image_path'])
+
         elif isinstance(self.current_shape, DiamondStep):
-            self.current_shape.step_description = self.step_desc_entry.get()
-            self.current_shape.tools = self.diamond_tools_entry.get()
-            self.current_shape.image_path = self.image_path_entry.get()
-        elif isinstance(self.current_shape, ComponentBox):
-            self.current_shape.is_leaf_node = self.is_leaf_var.get()
-            self.current_shape.component_name = self.component_name_entry.get()
-            self.current_shape.material = self.material_combo.get()
-            self.current_shape.weight = self.weight_entry.get()
-            self.current_shape.weight_unit = self.weight_unit_combo.get()
+            if 'name' in self.dynamic_fields:
+                self.current_shape.name = self._get_widget_value(self.dynamic_fields['name'])
+                self.current_shape.text = self.current_shape.name
+            if 'tools' in self.dynamic_fields:
+                self.current_shape.tools = self._get_widget_value(self.dynamic_fields['tools'])
 
-    def _on_leaf_checkbox_changed(self):
-        self._update_leaf_info_visibility()
-
-    def _update_leaf_info_visibility(self):
-        if self.is_leaf_var.get():
-            self.leaf_info_frame.grid()
-        else:
-            self.leaf_info_frame.grid_remove()
+    def refresh(self):
+        """Reload the properties for the current shape to reflect DB changes."""
+        self.load_shape(self.current_shape)
 
     def clear(self):
+        """Clear the properties panel."""
         self.load_shape(None)

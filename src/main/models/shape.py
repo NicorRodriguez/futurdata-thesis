@@ -47,7 +47,15 @@ class Shape:
         shape_type = data["type"]
 
         if shape_type == "product":
-            shape = ProductBox(data["x"], data["y"])
+            # Backward compatibility: map legacy ProductBox to root ComponentBox.
+            shape = ComponentBox(data["x"], data["y"])
+            shape.properties["node_type"] = "Root"
+            if data.get("text"):
+                first_line = str(data.get("text", "")).splitlines()[0].strip()
+                shape.properties["name"] = first_line
+                shape.text = first_line or "Root Component"
+            else:
+                shape.text = "Root Component"
         elif shape_type == "action":
             shape = ActionCircle(data["x"], data["y"])
         elif shape_type == "diamond":
@@ -68,54 +76,15 @@ class Shape:
         return shape
 
 
-class ProductBox(Shape):
-    WIDTH = 200
-    HEIGHT = 80
-
-    def __init__(self, x: float, y: float):
-        super().__init__(x, y, "product")
-        self.text = "Product\nBrand:\nModel:"
-        self.brand = ""
-        self.model = ""
-
-    def get_bounds(self) -> Tuple[float, float, float, float]:
-        half_w = self.WIDTH / 2
-        half_h = self.HEIGHT / 2
-        return (self.x - half_w, self.y - half_h, self.x + half_w, self.y + half_h)
-
-    def get_connection_points(self) -> Dict[str, Tuple[float, float]]:
-        half_h = self.HEIGHT / 2
-        half_w = self.WIDTH / 2
-        return {
-            'top': (self.x, self.y - half_h),
-            'bottom': (self.x, self.y + half_h),
-            'left': (self.x - half_w, self.y),
-            'right': (self.x + half_w, self.y)
-        }
-
-    def contains_point(self, px: float, py: float) -> bool:
-        x1, y1, x2, y2 = self.get_bounds()
-        return x1 <= px <= x2 and y1 <= py <= y2
-
-    def to_dict(self) -> dict:
-        data = super().to_dict()
-        data.update({"brand": self.brand, "model": self.model})
-        return data
-
-    def load_properties(self, data: dict):
-        self.brand = data.get("brand", "")
-        self.model = data.get("model", "")
-
-
 class ActionCircle(Shape):
     RADIUS = 60
 
     def __init__(self, x: float, y: float):
         super().__init__(x, y, "action")
-        self.text = "Action\naction_id:\ntools:"
-        self.action_id = ""
-        self.name = ""
+        self.text = "Step"
+        self.step_description = ""
         self.tools = ""
+        self.image_path = ""
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         r = self.RADIUS
@@ -136,13 +105,17 @@ class ActionCircle(Shape):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({"action_id": self.action_id, "name": self.name, "tools": self.tools})
+        data.update({
+            "step_description": self.step_description,
+            "tools": self.tools,
+            "image_path": self.image_path
+        })
         return data
 
     def load_properties(self, data: dict):
-        self.action_id = data.get("action_id", "")
-        self.name = data.get("name", "")
+        self.step_description = data.get("step_description", "")
         self.tools = data.get("tools", "")
+        self.image_path = data.get("image_path", "")
 
 
 class DiamondStep(Shape):
@@ -150,10 +123,10 @@ class DiamondStep(Shape):
 
     def __init__(self, x: float, y: float):
         super().__init__(x, y, "diamond")
-        self.text = "Activity"
-        self.step_description = ""
+        self.text = "Action"
+        self.action_id = ""
+        self.name = ""
         self.tools = ""
-        self.image_path = ""
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         half = self.SIZE / 2
@@ -176,32 +149,92 @@ class DiamondStep(Shape):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "step_description": self.step_description,
-            "tools": self.tools,
-            "image_path": self.image_path
-        })
+        data.update({"action_id": self.action_id, "name": self.name, "tools": self.tools})
         return data
 
     def load_properties(self, data: dict):
-        self.step_description = data.get("step_description", "")
+        self.action_id = data.get("action_id", "")
+        self.name = data.get("name", "")
         self.tools = data.get("tools", "")
-        self.image_path = data.get("image_path", "")
 
 
 class ComponentBox(Shape):
+    """
+    Component shape with fully dynamic properties.
+    Properties are stored in a dict - matches database columns directly.
+    Add new column to database = new property automatically available.
+    """
     WIDTH = 160
     HEIGHT = 80
 
+    # Default properties - these match database column names exactly
+    DEFAULT_PROPERTIES = {
+        'name': '',
+        'brand': '',
+        'model': '',
+        'description': '',
+        'root_component_id': None,
+        'color_id': None,
+        'material_id': None,
+        'weight': '',
+        'weight_unit': 'g',
+        'node_type': ''  # 'Root', 'Leaf', or '' (intermediate)
+    }
+
     def __init__(self, x: float, y: float):
         super().__init__(x, y, "component")
-        self.text = "Component\ncolor:\nmaterial:"
-        self.component_name = ""
-        self.color = ""
-        self.material = ""
-        self.weight = ""
-        self.weight_unit = "g"
-        self.is_leaf_node = False
+        self.text = "Component"
+        # Dynamic properties dict - stores all component properties
+        self.properties = dict(self.DEFAULT_PROPERTIES)
+
+    # Property accessors for backward compatibility
+    @property
+    def component_name(self):
+        return self.properties.get('name', '')
+
+    @component_name.setter
+    def component_name(self, value):
+        self.properties['name'] = value
+
+    @property
+    def color_id(self):
+        return self.properties.get('color_id', None)
+
+    @color_id.setter
+    def color_id(self, value):
+        self.properties['color_id'] = value
+
+    @property
+    def material_id(self):
+        return self.properties.get('material_id', None)
+
+    @material_id.setter
+    def material_id(self, value):
+        self.properties['material_id'] = value
+
+    @property
+    def weight(self):
+        return self.properties.get('weight', '')
+
+    @weight.setter
+    def weight(self, value):
+        self.properties['weight'] = value
+
+    @property
+    def weight_unit(self):
+        return self.properties.get('weight_unit', 'g')
+
+    @weight_unit.setter
+    def weight_unit(self, value):
+        self.properties['weight_unit'] = value
+
+    @property
+    def node_type(self):
+        return self.properties.get('node_type', '')
+
+    @node_type.setter
+    def node_type(self, value):
+        self.properties['node_type'] = value
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         half_w = self.WIDTH / 2
@@ -224,23 +257,21 @@ class ComponentBox(Shape):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "component_name": self.component_name,
-            "color": self.color,
-            "material": self.material,
-            "weight": self.weight,
-            "weight_unit": self.weight_unit,
-            "is_leaf_node": self.is_leaf_node
-        })
+        # Save all properties from dict - fully dynamic
+        data.update(self.properties)
+        # Keep backward compatibility key
+        data['component_name'] = self.properties.get('name', '')
         return data
 
     def load_properties(self, data: dict):
-        self.component_name = data.get("component_name", "")
-        self.color = data.get("color", "")
-        self.material = data.get("material", "")
-        self.weight = data.get("weight", "")
-        self.weight_unit = data.get("weight_unit", "g")
-        self.is_leaf_node = data.get("is_leaf_node", False)
+        # Load all properties dynamically
+        for key, value in data.items():
+            if key not in ['id', 'type', 'x', 'y', 'text']:
+                # Map old 'component_name' to 'name'
+                if key == 'component_name':
+                    self.properties['name'] = value
+                else:
+                    self.properties[key] = value
 
 
 class ArrowShape(Shape):
