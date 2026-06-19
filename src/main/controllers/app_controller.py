@@ -7,6 +7,7 @@ from ..models import Diagram, ActionCircle, DiamondStep, ComponentBox, ArrowShap
 from ..models.database import get_database
 from ..views.add_color_dialog import AddColorDialog
 from ..views.add_material_dialog import AddMaterialDialog
+from ..views.add_tool_dialog import AddToolDialog
 from ..utils import (
     CommandHistory, AddShapeCommand, RemoveShapeCommand, MoveShapeCommand,
     AddConnectionCommand, EditShapePropertiesCommand, snap_to_grid,
@@ -97,7 +98,9 @@ class AppController:
             self.arrow_mode = False
             self.connect_mode = False
             self.connecting_from = None
+            self.view.canvas.config(cursor="")
             self.view.set_status("Cancelled")
+            self.view.root.after(1500, lambda: self.view.set_status("Ready"))
 
     def on_canvas_click(self, event):
         x = self.view.canvas.canvasx(event.x)
@@ -170,17 +173,17 @@ class AppController:
 
         # Scroll right
         if mouse_x > visible_width - margin:
-            canvas.xview_scroll(3, "units")
+            canvas.xview_scroll(1, "units")
         # Scroll left
         elif mouse_x < margin:
-            canvas.xview_scroll(-3, "units")
+            canvas.xview_scroll(-1, "units")
 
         # Scroll down
         if mouse_y > visible_height - margin:
-            canvas.yview_scroll(3, "units")
+            canvas.yview_scroll(1, "units")
         # Scroll up
         elif mouse_y < margin:
-            canvas.yview_scroll(-3, "units")
+            canvas.yview_scroll(-1, "units")
 
     def on_canvas_release(self, event):
         if self.dragging and self.drag_shapes and self.drag_initial_positions:
@@ -229,8 +232,6 @@ class AppController:
         menu.add_separator()
         menu.add_command(label="Duplicate", command=lambda: self._duplicate_shape(shape))
         menu.add_command(label="Delete", command=lambda: self._delete_shape(shape))
-        menu.add_separator()
-        menu.add_command(label="Connect to...", command=lambda: self._start_connection_from(shape))
         menu.post(event.x_root, event.y_root)
 
     def _handle_arrow_connection_click(self, shape):
@@ -252,12 +253,14 @@ class AppController:
                 self.view.set_status("Cancelled - same shape.")
             self.connecting_from = None
             self.arrow_mode = False
+            self.view.canvas.config(cursor="")
+            self.view.root.after(2000, lambda: self.view.set_status("Ready"))
             self._update_view()
 
     def _handle_connection_click(self, shape):
         if self.connecting_from is None:
             self.connecting_from = shape
-            self.view.set_status(f"Connection started from {shape.shape_type}. Click target shape.")
+            self.view.set_status(f"Connection started from {shape.shape_type}. Click target shape or press ESC to cancel.")
         else:
             self._clear_preview_line()
             if self.connecting_from != shape:
@@ -267,6 +270,7 @@ class AppController:
                 self.view.set_status("Cancelled - same shape.")
             self.connecting_from = None
             self.connect_mode = False
+            self.view.root.after(2000, lambda: self.view.set_status("Ready"))
 
     def _create_arrow_connection(self, from_shape, to_shape):
         arrow = ArrowShape(0, 0, from_shape, to_shape)
@@ -567,7 +571,8 @@ class AppController:
         if shape_type == "arrow":
             self.arrow_mode = True
             self.connecting_from = None
-            self.view.set_status("Arrow mode: Click on a shape to start")
+            self.view.canvas.config(cursor="crosshair")
+            self.view.set_status("⚡ ARROW MODE: Click source shape, then target shape (Press ESC to cancel)")
             return
 
         x, y = self._get_next_shape_position()
@@ -685,9 +690,12 @@ class AppController:
         self.connecting_from = None
 
         if self.connect_mode:
-            self.view.set_status("Connection mode: Click source shape, then target shape")
+            self.view.set_status("⚡ CONNECTION MODE ACTIVE: Click source shape, then target shape (Press C or ESC to exit)")
+            self.view.canvas.config(cursor="crosshair")
         else:
             self.view.set_status("Connection mode disabled")
+            self.view.canvas.config(cursor="")
+            self.view.root.after(1500, lambda: self.view.set_status("Ready"))
 
     def apply_properties(self, shape, old_properties, new_properties):
         command = EditShapePropertiesCommand(shape, old_properties, new_properties)
@@ -902,6 +910,14 @@ class AppController:
         self.db.create_material(name, sci_name, color_id)
         self.view.refresh_properties_panel()
         self.view.set_status(f"Added new material: {name}")
+
+    def show_add_tool_dialog(self):
+        AddToolDialog(self.view.root, self)
+
+    def add_new_tool(self, name, category):
+        self.db.create_tool(name, category)
+        self.view.refresh_properties_panel()
+        self.view.set_status(f"Added new tool: {name}")
 
     def _update_view(self):
         self.view.canvas.redraw_all(self.diagram)

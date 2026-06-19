@@ -32,18 +32,6 @@ class PropertiesPanel(ttk.Frame):
         title = ttk.Label(self, text="Properties", font=("Arial", 12, "bold"))
         title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
-        # Shape ID (read-only)
-        ttk.Label(self, text="Shape ID:").grid(row=1, column=0, sticky="w", pady=2)
-        self.id_label = ttk.Label(self, text="-", foreground="blue", font=("Arial", 9, "bold"))
-        self.id_label.grid(row=1, column=1, sticky="w", pady=2)
-
-        # Shape Type (read-only)
-        ttk.Label(self, text="Type:").grid(row=2, column=0, sticky="w", pady=2)
-        self.type_label = ttk.Label(self, text="-", foreground="gray")
-        self.type_label.grid(row=2, column=1, sticky="w", pady=2)
-
-        ttk.Separator(self, orient="horizontal").grid(row=3, column=0, columnspan=2, sticky="ew", pady=10)
-
         # Dynamic properties frame - will be populated based on shape type
         self.properties_frame = ttk.LabelFrame(self, text="Properties", padding=5)
 
@@ -279,7 +267,6 @@ class PropertiesPanel(ttk.Frame):
             'image_path': shape.image_path
         }
 
-        step_order_value = "Auto"
         step_db_id = getattr(shape, "db_step_id", None)
         if step_db_id:
             db_row = self.db.get_step(int(step_db_id))
@@ -288,25 +275,8 @@ class PropertiesPanel(ttk.Frame):
                 shape.step_description = db_row.get('description', shape.step_description)
                 shape.text = db_row.get('title', shape.text) or shape.text
                 shape.image_path = db_row.get('image_path', shape.image_path)
-                step_order_value = str(db_row.get('step_order', 'Auto'))
 
-        # Add read-only step_order display at top
         row_num = 0
-        ttk.Label(self.properties_frame, text="Step Order:").grid(row=row_num, column=0, sticky="w", pady=3)
-        step_order_label = ttk.Label(
-            self.properties_frame, 
-            text=step_order_value, 
-            foreground="blue",
-            font=("Arial", 9, "bold")
-        )
-        step_order_label.grid(row=row_num, column=1, sticky="w", pady=3)
-        row_num += 1
-        
-        # Add separator
-        ttk.Separator(self.properties_frame, orient="horizontal").grid(
-            row=row_num, column=0, columnspan=2, sticky="ew", pady=5
-        )
-        row_num += 1
 
         # Add editable fields
         for field in fields:
@@ -322,15 +292,9 @@ class PropertiesPanel(ttk.Frame):
 
         if shape is None:
             self._show_empty_state()
-            self.id_label.config(text="-")
-            self.type_label.config(text="-")
             return
 
         self.empty_label.grid_remove()
-
-        # Show shape ID and type
-        self.id_label.config(text=f"#{shape.id}")
-        self.type_label.config(text=shape.shape_type.capitalize())
 
         # Show properties frame
         self.properties_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=5)

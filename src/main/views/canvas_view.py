@@ -190,7 +190,8 @@ class DiagramCanvas(tk.Canvas):
             x1, y1, x2, y2, fill=self.ACTION_FILL, outline=border_color, width=border_width, tags="shape"
         )
         shape.text_id = self.create_text(
-            shape.x, shape.y, text=shape.text, font=("Arial", 9), fill="black", tags="shape_text"
+            shape.x, shape.y, text=shape.text, font=("Arial", 9), fill="black", 
+            width=75, tags="shape_text"
         )
 
     def _draw_diamond_step(self, shape: DiamondStep):
@@ -207,7 +208,8 @@ class DiagramCanvas(tk.Canvas):
             points, fill=self.DIAMOND_FILL, outline=border_color, width=border_width, tags="shape"
         )
         shape.text_id = self.create_text(
-            shape.x, shape.y, text=shape.text, font=("Arial", 8), fill="black", tags="shape_text"
+            shape.x, shape.y, text=shape.text, font=("Arial", 8), fill="black", 
+            width=65, tags="shape_text"
         )
 
     def _draw_component_box(self, shape: ComponentBox):
@@ -218,7 +220,8 @@ class DiagramCanvas(tk.Canvas):
             x1, y1, x2, y2, fill=self.COMPONENT_FILL, outline=border_color, width=border_width, tags="shape"
         )
         shape.text_id = self.create_text(
-            shape.x, shape.y, text=shape.text, font=("Arial", 9), fill="black", tags="shape_text"
+            shape.x, shape.y, text=shape.text, font=("Arial", 9), fill="black", 
+            width=145, tags="shape_text"
         )
 
     def _draw_arrow_shape(self, shape: ArrowShape):
