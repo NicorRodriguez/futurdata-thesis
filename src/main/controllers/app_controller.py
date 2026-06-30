@@ -142,6 +142,15 @@ class AppController:
         dx = x - self.drag_start[0]
         dy = y - self.drag_start[1]
 
+        # Prevent dragging shapes into negative coords, where they'd hide behind the
+        # left panel / above the canvas and be unreachable (only CTRL+Z could recover them).
+        min_x1 = min(s.get_bounds()[0] for s in self.drag_shapes)
+        min_y1 = min(s.get_bounds()[1] for s in self.drag_shapes)
+        if min_x1 + dx < 0:
+            dx = -min_x1
+        if min_y1 + dy < 0:
+            dy = -min_y1
+
         # Move each shape freely during drag (no snapping)
         for shape in self.drag_shapes:
             shape.x += dx
