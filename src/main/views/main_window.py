@@ -80,6 +80,20 @@ class MainWindow:
 
         ttk.Button(toolbar, text="Clear", width=8, command=self.controller.clear_canvas).pack(side="left", padx=2)
 
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=5)
+
+        self.snap_btn = tk.Button(
+            toolbar,
+            text = "Snap to Grid: = ON",
+            width = 18,
+            font = ("Arial", 9),
+            bg = "#e0e0e0",
+            relief = tk.SUNKEN,
+            command = self.controller.toggle_snap_mode
+        )
+
+        self.snap_btn.pack(side="left", padx=2)
+
     def _create_main_area(self):
         main_frame = ttk.Frame(self.root)
         main_frame.pack(side="top", fill="both", expand=True)
@@ -96,22 +110,29 @@ class MainWindow:
         ttk.Button(palette_frame, text="◇ Diamond Step", command=lambda: self.controller.add_shape("diamond")).pack(fill="x", pady=2)
         ttk.Button(palette_frame, text="→ Arrow", command=lambda: self.controller.add_shape("arrow")).pack(fill="x", pady=2)
 
+        self.paned_window = ttk.PanedWindow(main_frame, orient="horizontal")
+        self.paned_window.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+
         canvas_frame = ttk.Frame(main_frame)
-        canvas_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+
+        h_scroll = ttk.Scrollbar(canvas_frame, orient="horizontal", command=lambda *args: self.canvas_view_scroll_x if hasattr(self, 'canvas_view_scroll_x') else None)
+        h_scroll.pack(side="bottom", fill="x")
+
+        v_scroll = ttk.Scrollbar(canvas_frame, orient="vertical")
+        v_scroll.pack(side="right", fill="y")
 
         self.canvas = DiagramCanvas(canvas_frame, bg="white")
         self.canvas.pack(side="left", fill="both", expand=True)
 
-        v_scroll = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
-        v_scroll.pack(side="right", fill="y")
-        self.canvas.config(yscrollcommand=v_scroll.set)
+        v_scroll.config(command=self.canvas.yview)
+        h_scroll.config(command=self.canvas.xview)
+        self.canvas.config(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
 
-        h_scroll = ttk.Scrollbar(self.root, orient="horizontal", command=self.canvas.xview)
-        h_scroll.pack(side="bottom", fill="x", before=canvas_frame)
-        self.canvas.config(xscrollcommand=h_scroll.set)
+        self.paned_window.add(canvas_frame, weight=4)
 
-        self.properties_panel = PropertiesPanel(main_frame, on_apply_callback=self.controller.apply_properties)
-        self.properties_panel.pack(side="right", fill="y", padx=(0, 5), pady=5)
+        self.properties_panel = PropertiesPanel(self.paned_window, on_apply_callback=self.controller.apply_properties)
+
+        self.paned_window.add(self.properties_panel, weight=1)
 
     def _create_status_bar(self):
         self.status_bar = ttk.Frame(self.root, relief="sunken")
@@ -218,3 +239,9 @@ class MainWindow:
 
     def show_info(self, title: str, message: str):
         messagebox.showinfo(title, message)
+    
+    def update_snap_button(self, snap_enabled: bool):
+        if snap_enabled:
+            self.snap_btn.config(text="Snap to Grid: ON", relief=tk.SUNKEN, bg="#e0e0e0")
+        else:
+            self.snap_btn.config(text="Snap to Grid: OFF", relief=tk.RAISED, bg="#f0f0f0")

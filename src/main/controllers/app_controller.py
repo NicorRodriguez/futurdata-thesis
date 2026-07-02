@@ -824,6 +824,21 @@ class AppController:
         self.view.canvas.toggle_grid()
         self.view.set_status(f"Grid: {'on' if self.view.canvas.show_grid else 'off'}")
 
+    def toggle_snap_mode(self):
+        self.diagram.snap_to_grid = not self.diagram.snap_to_grid
+
+        if hasattr(self.view.canvas, 'snap_to_grid'):
+            self.view.canvas.snap_to_grid = self.diagram.snap_to_grid
+
+        self.view.update_snap_button(snap_enabled=self.diagram.snap_to_grid)
+
+        if self.diagram.snap_to_grid:
+            self.view.set_status("Snap to grid: on")
+        else:
+            self.view.set_status("Snap to grid: off")
+            
+        self._update_view()
+
     def toggle_snap(self):
         """Toggle snap-to-grid for shape positioning."""
         self.diagram.snap_to_grid = not self.diagram.snap_to_grid
