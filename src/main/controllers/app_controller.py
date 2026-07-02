@@ -15,6 +15,8 @@ from ..utils import (
 )
 from ..utils.diagram_loader import DiagramLoader
 from ..utils.json_exporter import EnhancedJSONExporter
+from ..views.manage_colors_dialog import ManageColorsDialog
+from ..views.manage_materials_dialog import ManageMaterialsDialog
 
 
 class AppController:
@@ -1004,21 +1006,56 @@ class AppController:
         """Open the dialog for adding a new color."""
         AddColorDialog(self.view.root, self)
 
+    def show_manage_colors_dialog(self):
+        """Open the dialog for managing colors."""
+        ManageColorsDialog(self.view.root, self)
+
     def add_new_color(self, name, hex_code, r, g, b):
         """Create a new color in the DB and refresh the panel."""
         self.db.create_color(name, hex_code, r, g, b)
         self.view.refresh_properties_panel()
         self.view.set_status(f"Added new color: {name}")
 
+    def delete_color(self, color_id: int) -> bool:
+        """Deletes a color and refreshes the properties panel if needed."""
+        try:
+            success = self.db.delete_color(color_id)
+            if success:
+                # If the property panel is open, we refresh it
+                if hasattr(self.view, 'refresh_properties_panel'):
+                    self.view.refresh_properties_panel()
+            return success
+        except sqlite3.IntegrityError:
+            raise ValueError("The color cannot be deleted because it is already assigned to a component.")
+        except Exception as e:
+            raise Exception(f"Error when deleting the color: {e}")
+
     def show_add_material_dialog(self):
         """Open the dialog for adding a new material."""
         AddMaterialDialog(self.view.root, self)
+
+    def show_manage_materials_dialog(self):
+        """Open the dialog for managing materials."""
+        ManageMaterialsDialog(self.view.root, self)
 
     def add_new_material(self, name, sci_name, color_id):
         """Create a new material in the DB and refresh the panel."""
         self.db.create_material(name, sci_name, color_id)
         self.view.refresh_properties_panel()
         self.view.set_status(f"Added new material: {name}")
+
+    def delete_material(self, material_id: int) -> bool:
+        """Deletes a material and refreshes the view."""
+        try:
+            success = self.db.delete_material(material_id)
+            if success:
+                if hasattr(self.view, 'refresh_properties_panel'):
+                    self.view.refresh_properties_panel()
+            return success
+        except sqlite3.IntegrityError:
+            raise ValueError("The material cannot be deleted because it is already assigned to a component.")
+        except Exception as e:
+            raise Exception(f"Error when deleting a material: {e}")
 
     def show_add_tool_dialog(self):
         """Open the dialog for adding a new tool."""
